@@ -209,10 +209,6 @@ class ChurnPredictor:
 # Global predictor instance
 churn_predictor = ChurnPredictor()
 
-def predict_churn(features: Dict[str, Any]) -> Dict[str, Any]:
-    """Main prediction function to be called by API service"""
-    return churn_predictor.predict_churn(features)
-
 def get_model_health() -> Dict[str, Any]:
     """Get model health status"""
     return {

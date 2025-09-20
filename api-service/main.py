@@ -7,13 +7,23 @@ import os
 import json
 from datetime import datetime
 import logging
-from model_predictor import predict_churn as model_predict_churn, get_model_health
+from contextlib import asynccontextmanager
+from model_predictor import churn_predictor, get_model_health
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Churn Prediction API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager"""
+    # Startup
+    connect_aerospike()
+    yield
+    # Shutdown (if needed)
+    pass
+
+app = FastAPI(title="Churn Prediction API", version="1.0.0", lifespan=lifespan)
 
 # Environment variables
 AEROSPIKE_HOST = os.getenv("AEROSPIKE_HOST", "aerospike")
@@ -110,6 +120,8 @@ class ChurnPredictionResponse(BaseModel):
     prediction_timestamp: str
 
 class MonitoringMetrics(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     api_performance: Dict[str, Any]
     feature_freshness: Dict[str, Any]
     model_accuracy: Dict[str, Any]
@@ -180,12 +192,6 @@ def retrieve_all_features(user_id: str) -> Dict[str, Any]:
 
 # API Endpoints
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize connections on startup"""
-    # Try to connect to Aerospike, but don't fail if it's not ready yet
-    connect_aerospike()
-
 @app.get("/")
 async def root():
     return {"message": "Churn Prediction API", "version": "1.0.0"}
@@ -249,7 +255,7 @@ async def predict_churn(user_id: str) -> ChurnPredictionResponse:
             raise HTTPException(status_code=404, detail=f"No features found for user {user_id}")
         
         # Call local model for prediction
-        prediction_data = model_predict_churn(features)
+        prediction_data = churn_predictor.predict_churn(features)
         
         # Prepare response
         response = ChurnPredictionResponse(
