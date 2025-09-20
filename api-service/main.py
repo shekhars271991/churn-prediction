@@ -15,16 +15,32 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Churn Prediction API", version="1.0.0")
 
 # Environment variables
-AEROSPIKE_HOST = os.getenv("AEROSPIKE_HOST", "localhost")
+AEROSPIKE_HOST = os.getenv("AEROSPIKE_HOST", "aerospike")
 AEROSPIKE_PORT = int(os.getenv("AEROSPIKE_PORT", "3000"))
 MODEL_SERVICE_URL = os.getenv("MODEL_SERVICE_URL", "http://localhost:8001")
 NUDGE_SERVICE_URL = os.getenv("NUDGE_SERVICE_URL", "http://localhost:8002")
 
-# Aerospike client
-config = {
-    'hosts': [(AEROSPIKE_HOST, AEROSPIKE_PORT)]
-}
-client = aerospike.client(config).connect()
+# Aerospike client (will be initialized on startup)
+client = None
+
+def connect_aerospike():
+    """Connect to Aerospike with retry logic"""
+    global client
+    config = {
+        'hosts': [(AEROSPIKE_HOST, AEROSPIKE_PORT)]
+    }
+    try:
+        logger.info(f"Attempting to connect to Aerospike at {AEROSPIKE_HOST}:{AEROSPIKE_PORT}")
+        client = aerospike.client(config).connect()
+        logger.info("Connected to Aerospike successfully")
+        # Test the connection
+        info = client.info_all("build")
+        logger.info(f"Aerospike info: {info}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to connect to Aerospike: {str(e)}")
+        client = None
+        return False
 
 # Pydantic models
 class UserProfileFeatures(BaseModel):
@@ -101,8 +117,18 @@ class MonitoringMetrics(BaseModel):
 # Helper functions
 def store_features_in_aerospike(user_id: str, features: Dict[str, Any], feature_type: str):
     """Store features in Aerospike with proper key structure"""
+    global client
+    
+    # Try to reconnect if client is None
+    if client is None:
+        if not connect_aerospike():
+            raise HTTPException(status_code=503, detail="Aerospike not available")
+    
     try:
-        key = (None, "churn_features", f"{user_id}_{feature_type}")
+        namespace = "churn_features"
+        set_name = "users"
+        key_name = user_id + "_" + feature_type
+        key = (namespace, set_name, key_name)
         features_with_timestamp = {
             **features,
             "timestamp": datetime.utcnow().isoformat(),
@@ -112,17 +138,29 @@ def store_features_in_aerospike(user_id: str, features: Dict[str, Any], feature_
         logger.info(f"Stored {feature_type} features for user {user_id}")
     except Exception as e:
         logger.error(f"Error storing features for user {user_id}: {str(e)}")
+        # Try to reconnect on error
+        client = None
         raise HTTPException(status_code=500, detail=f"Failed to store features: {str(e)}")
 
 def retrieve_all_features(user_id: str) -> Dict[str, Any]:
     """Retrieve all feature types for a user from Aerospike"""
+    global client
+    
+    # Try to reconnect if client is None
+    if client is None:
+        if not connect_aerospike():
+            raise HTTPException(status_code=503, detail="Aerospike not available")
+    
     feature_types = ["profile", "behavior", "transactional", "engagement", "support", "realtime"]
     all_features = {}
     feature_freshness = None
     
     for feature_type in feature_types:
         try:
-            key = (None, "churn_features", f"{user_id}_{feature_type}")
+            namespace = "churn_features"
+            set_name = "users"
+            key_name = user_id + "_" + feature_type
+            key = (namespace, set_name, key_name)
             (key, metadata, bins) = client.get(key)
             if bins:
                 # Remove metadata fields and merge features
@@ -134,10 +172,18 @@ def retrieve_all_features(user_id: str) -> Dict[str, Any]:
             logger.warning(f"No {feature_type} features found for user {user_id}")
         except Exception as e:
             logger.error(f"Error retrieving {feature_type} features for user {user_id}: {str(e)}")
+            # Try to reconnect on error
+            client = None
     
     return all_features, feature_freshness or datetime.utcnow().isoformat()
 
 # API Endpoints
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize connections on startup"""
+    # Try to connect to Aerospike, but don't fail if it's not ready yet
+    connect_aerospike()
 
 @app.get("/")
 async def root():
@@ -279,12 +325,29 @@ async def get_monitoring_metrics() -> MonitoringMetrics:
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    global client
+    
     try:
-        # Test Aerospike connection
-        client.info_all()
-        return {"status": "healthy", "aerospike": "connected"}
+        aerospike_status = "disconnected"
+        if client is not None:
+            try:
+                # Test basic connection
+                info = client.info_all("build")
+                aerospike_status = "connected"
+            except Exception as e:
+                aerospike_status = f"error: {str(e)}"
+                client = None
+        
+        return {
+            "status": "healthy" if aerospike_status == "connected" else "degraded",
+            "aerospike": aerospike_status,
+            "timestamp": datetime.utcnow().isoformat()
+        }
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn

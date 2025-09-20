@@ -1,13 +1,23 @@
 services:
   aerospike:
-    image: aerospike/aerospike-server-enterprise:8.1
+    image: aerospike/aerospike-server:latest
     container_name: featurestore_aerospike
     ports:
       - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+      - "3003:3003"
     volumes:
       - aerospike_data:/opt/aerospike/data
-      - ./aerospike.conf:/etc/aerospike/aerospike.conf
-      - ./features.conf:/etc/aerospike/features.conf
+      - aerospike_logs:/var/log/aerospike
+      - ./aerospike.conf:/opt/aerospike/etc/aerospike-custom.conf
+    entrypoint: ["asd", "--foreground", "--config-file", "/opt/aerospike/etc/aerospike-custom.conf"]
+    healthcheck:
+      test: ["CMD", "asinfo", "-h", "localhost", "-p", "3000", "-v", "build"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
     networks:
       - featurestore_network
@@ -83,6 +93,9 @@ services:
 
 volumes:
   aerospike_data:
+    driver: local
+  aerospike_logs:
+    driver: local
 
 networks:
   featurestore_network:
