@@ -26,17 +26,29 @@ class ChurnPredictor:
     
     def load_or_create_model(self):
         """Load existing model or create a synthetic one for POC"""
-        model_path = "churn_model.joblib"
+        # Try multiple model paths and formats
+        model_paths = [
+            "churn_model.joblib",  # Current directory .joblib
+            "churn_model.pkl",     # Current directory .pkl
+            "../models/churn_model.joblib",  # Models directory .joblib
+            "../models/churn_model.pkl",     # Models directory .pkl
+            "/app/models/churn_model.joblib", # Absolute path .joblib
+            "/app/models/churn_model.pkl"     # Absolute path .pkl
+        ]
         
-        if os.path.exists(model_path):
-            try:
-                self.model = joblib.load(model_path)
-                # Set feature columns for loaded model
-                self._set_feature_columns()
-                logger.info("Loaded existing churn model")
-                return
-            except Exception as e:
-                logger.warning(f"Failed to load model: {e}, creating new one")
+        for model_path in model_paths:
+            if os.path.exists(model_path):
+                try:
+                    self.model = joblib.load(model_path)
+                    # Set feature columns for loaded model
+                    self._set_feature_columns()
+                    logger.info(f"Loaded existing churn model from: {model_path}")
+                    return
+                except Exception as e:
+                    logger.warning(f"Failed to load model from {model_path}: {e}")
+                    continue
+        
+        logger.info("No existing model found, creating new synthetic model")
         
         # Create synthetic model for POC
         self._create_synthetic_model()

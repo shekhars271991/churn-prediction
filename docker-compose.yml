@@ -68,8 +68,12 @@ services:
       - ./data:/app/data
       - ./models:/app/models
     environment:
+      - NUM_USERS=5000
+      - NATIONALITY=en_US
       - AEROSPIKE_HOST=aerospike
       - AEROSPIKE_PORT=3000
+      - MODEL_OUTPUT_PATH=/app/models/churn_model.joblib
+      - CHURN_RATE=0.25
     networks:
       - featurestore_network
     depends_on:
