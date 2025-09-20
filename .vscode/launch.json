@@ -11,22 +11,9 @@
             "env": {
                 "AEROSPIKE_HOST": "localhost",
                 "AEROSPIKE_PORT": "3000",
-                "MODEL_SERVICE_URL": "http://localhost:8101",
                 "NUDGE_SERVICE_URL": "http://localhost:8102"
             },
             "args": ["--host", "0.0.0.0", "--port", "8100"],
-            "justMyCode": true,
-            "stopOnEntry": false
-        },
-        {
-            "name": "Debug Model Service",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/model-service/main.py",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/model-service",
-            "env": {},
-            "args": ["--host", "0.0.0.0", "--port", "8101"],
             "justMyCode": true,
             "stopOnEntry": false
         },
@@ -67,7 +54,6 @@
             "env": {
                 "AEROSPIKE_HOST": "localhost",
                 "AEROSPIKE_PORT": "3000",
-                "MODEL_SERVICE_URL": "http://localhost:8001",
                 "NUDGE_SERVICE_URL": "http://localhost:8002"
             },
             "args": ["--host", "0.0.0.0", "--port", "8000"],

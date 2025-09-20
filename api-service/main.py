@@ -7,6 +7,7 @@ import os
 import json
 from datetime import datetime
 import logging
+from model_predictor import predict_churn as model_predict_churn, get_model_health
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -247,17 +248,8 @@ async def predict_churn(user_id: str) -> ChurnPredictionResponse:
         if not features:
             raise HTTPException(status_code=404, detail=f"No features found for user {user_id}")
         
-        # Call model service for prediction
-        async with httpx.AsyncClient() as client_http:
-            model_response = await client_http.post(
-                f"{MODEL_SERVICE_URL}/predict",
-                json={"user_id": user_id, "features": features}
-            )
-            
-            if model_response.status_code != 200:
-                raise HTTPException(status_code=500, detail="Model service error")
-            
-            prediction_data = model_response.json()
+        # Call local model for prediction
+        prediction_data = model_predict_churn(features)
         
         # Prepare response
         response = ChurnPredictionResponse(
@@ -338,9 +330,13 @@ async def health_check():
                 aerospike_status = f"error: {str(e)}"
                 client = None
         
+        # Get model health
+        model_health = get_model_health()
+        
         return {
-            "status": "healthy" if aerospike_status == "connected" else "degraded",
+            "status": "healthy" if aerospike_status == "connected" and model_health["model_loaded"] else "degraded",
             "aerospike": aerospike_status,
+            "model": model_health,
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:

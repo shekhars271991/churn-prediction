@@ -43,28 +43,14 @@ services:
     environment:
       - AEROSPIKE_HOST=aerospike
       - AEROSPIKE_PORT=3000
-      - MODEL_SERVICE_URL=http://model-service:8001
       - NUDGE_SERVICE_URL=http://nudge-service:8002
     networks:
       - featurestore_network
     depends_on:
       - aerospike
-      - model-service
       - nudge-service
     restart: unless-stopped
 
-  model-service:
-    build: ./model-service
-    container_name: churn_model_service
-    ports:
-      - "8001:8001"
-    environment:
-      - MODEL_PATH=/app/models
-    volumes:
-      - ./models:/app/models
-    networks:
-      - featurestore_network
-    restart: unless-stopped
 
   nudge-service:
     build: ./nudge-service
