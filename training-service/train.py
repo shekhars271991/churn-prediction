@@ -9,6 +9,10 @@ import aerospike
 import logging
 from datetime import datetime, timedelta
 import json
+from feature_config import (
+    FEATURE_COLUMNS, FEATURE_MAPPING, CATEGORICAL_MAPPINGS, 
+    CATEGORICAL_INDICES, MODEL_PARAMS, SYNTHETIC_DATA_PARAMS
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

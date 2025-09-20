@@ -10,6 +10,10 @@ import logging
 from datetime import datetime
 import joblib
 import os
+from feature_config import (
+    FEATURE_COLUMNS, FEATURE_MAPPING, CATEGORICAL_MAPPINGS, 
+    CATEGORICAL_INDICES, MODEL_PARAMS, SYNTHETIC_DATA_PARAMS
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -46,17 +50,7 @@ class ChurnPredictor:
     
     def _set_feature_columns(self):
         """Set feature columns for the model"""
-        self.feature_columns = [
-            'acc_age_days', 'member_dur', 'loyalty_tier_encoded', 'geo_location_encoded',
-            'device_type_encoded', 'pref_payment_encoded', 'lang_pref_encoded',
-            'days_last_login', 'days_last_purch', 'sess_7d', 'sess_30d', 'avg_sess_dur',
-            'ctr_10_sess', 'cart_abandon', 'wishlist_ratio', 'content_engage',
-            'avg_order_val', 'orders_6m', 'purch_freq_90d', 'last_hv_purch', 'refund_rate',
-            'sub_pay_status_encoded', 'discount_dep', 'push_open_rate', 'email_ctr',
-            'inapp_ctr', 'promo_resp_time', 'retention_resp_encoded', 'tickets_90d',
-            'avg_ticket_res', 'csat_score', 'refund_req', 'curr_sess_clk', 'checkout_time',
-            'cart_no_buy', 'bounce_flag'
-        ]
+        self.feature_columns = FEATURE_COLUMNS
     
     def _create_synthetic_model(self):
         """Create a synthetic XGBoost model for POC"""
@@ -66,8 +60,8 @@ class ChurnPredictor:
         self._set_feature_columns()
         
         # Generate synthetic training data
-        np.random.seed(42)
-        n_samples = 1000
+        np.random.seed(SYNTHETIC_DATA_PARAMS['random_seed'])
+        n_samples = SYNTHETIC_DATA_PARAMS['n_samples']
         
         # Create synthetic features
         X_synthetic = np.random.randn(n_samples, len(self.feature_columns))
@@ -80,12 +74,7 @@ class ChurnPredictor:
         ).astype(int)
         
         # Train XGBoost model
-        self.model = xgb.XGBClassifier(
-            n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
-            random_state=42
-        )
+        self.model = xgb.XGBClassifier(**MODEL_PARAMS)
         
         self.model.fit(X_synthetic, y_synthetic)
         logger.info("Synthetic model training completed")
@@ -95,47 +84,20 @@ class ChurnPredictor:
         # Create feature vector with defaults
         feature_vector = np.zeros(len(self.feature_columns))
         
-        # Mapping from input features to model features
-        feature_mapping = {
-            'acc_age_days': 0, 'member_dur': 1, 'days_last_login': 7, 'days_last_purch': 8,
-            'sess_7d': 9, 'sess_30d': 10, 'avg_sess_dur': 11, 'ctr_10_sess': 12,
-            'cart_abandon': 13, 'wishlist_ratio': 14, 'content_engage': 15,
-            'avg_order_val': 16, 'orders_6m': 17, 'purch_freq_90d': 18, 'last_hv_purch': 19,
-            'refund_rate': 20, 'discount_dep': 22, 'push_open_rate': 23, 'email_ctr': 24,
-            'inapp_ctr': 25, 'promo_resp_time': 26, 'tickets_90d': 28, 'avg_ticket_res': 29,
-            'csat_score': 30, 'refund_req': 31, 'curr_sess_clk': 32, 'checkout_time': 33,
-            'cart_no_buy': 34, 'bounce_flag': 35
-        }
-        
         # Fill in available features
         for feature_name, value in features.items():
-            if feature_name in feature_mapping and value is not None:
-                idx = feature_mapping[feature_name]
+            if feature_name in FEATURE_MAPPING and value is not None:
+                idx = FEATURE_MAPPING[feature_name]
                 if isinstance(value, (int, float)):
                     feature_vector[idx] = float(value)
                 elif isinstance(value, bool):
                     feature_vector[idx] = float(value)
         
         # Handle categorical features with simple encoding
-        categorical_mappings = {
-            'loyalty_tier': {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4},
-            'geo_location': {'US-CA': 1, 'US-NY': 2, 'US-TX': 3, 'UK': 4, 'DE': 5},
-            'device_type': {'mobile': 1, 'desktop': 2, 'tablet': 3},
-            'pref_payment': {'credit': 1, 'debit': 2, 'paypal': 3, 'crypto': 4},
-            'lang_pref': {'en': 1, 'es': 2, 'fr': 3, 'de': 4},
-            'sub_pay_status': {'active': 1, 'inactive': 2, 'cancelled': 3},
-            'retention_resp': {'positive': 1, 'negative': 2, 'neutral': 3}
-        }
-        
-        categorical_indices = {
-            'loyalty_tier': 2, 'geo_location': 3, 'device_type': 4,
-            'pref_payment': 5, 'lang_pref': 6, 'sub_pay_status': 21, 'retention_resp': 27
-        }
-        
-        for cat_feature, mapping in categorical_mappings.items():
+        for cat_feature, mapping in CATEGORICAL_MAPPINGS.items():
             if cat_feature in features and features[cat_feature] is not None:
                 encoded_value = mapping.get(features[cat_feature], 0)
-                idx = categorical_indices[cat_feature]
+                idx = CATEGORICAL_INDICES[cat_feature]
                 feature_vector[idx] = float(encoded_value)
         
         return feature_vector.reshape(1, -1)
