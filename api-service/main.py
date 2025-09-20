@@ -45,58 +45,58 @@ def connect_aerospike():
 # Pydantic models
 class UserProfileFeatures(BaseModel):
     user_id: str
-    account_age_days: Optional[int] = None
-    membership_duration: Optional[int] = None
+    acc_age_days: Optional[int] = None
+    member_dur: Optional[int] = None
     loyalty_tier: Optional[str] = None
     geo_location: Optional[str] = None
     device_type: Optional[str] = None
-    preferred_payment_method: Optional[str] = None
-    language_preference: Optional[str] = None
+    pref_payment: Optional[str] = None
+    lang_pref: Optional[str] = None
 
 class UserBehaviorFeatures(BaseModel):
     user_id: str
-    days_since_last_login: Optional[int] = None
-    days_since_last_purchase: Optional[int] = None
-    sessions_last_7days: Optional[int] = None
-    sessions_last_30days: Optional[int] = None
-    avg_session_duration_last_30days: Optional[float] = None
-    click_through_rate_last_10_sessions: Optional[float] = None
-    cart_abandonment_rate: Optional[float] = None
-    wishlist_adds_vs_purchases: Optional[float] = None
-    content_engagement_rate: Optional[float] = None
+    days_last_login: Optional[int] = None
+    days_last_purch: Optional[int] = None
+    sess_7d: Optional[int] = None
+    sess_30d: Optional[int] = None
+    avg_sess_dur: Optional[float] = None
+    ctr_10_sess: Optional[float] = None
+    cart_abandon: Optional[float] = None
+    wishlist_ratio: Optional[float] = None
+    content_engage: Optional[float] = None
 
 class TransactionalFeatures(BaseModel):
     user_id: str
-    avg_order_value: Optional[float] = None
-    total_orders_last_6months: Optional[int] = None
-    purchase_frequency_last_90days: Optional[float] = None
-    time_since_last_high_value_purchase: Optional[int] = None
+    avg_order_val: Optional[float] = None
+    orders_6m: Optional[int] = None
+    purch_freq_90d: Optional[float] = None
+    last_hv_purch: Optional[int] = None
     refund_rate: Optional[float] = None
-    subscription_payment_status: Optional[str] = None
-    discount_dependency_score: Optional[float] = None
-    category_spend_distribution: Optional[Dict[str, float]] = None
+    sub_pay_status: Optional[str] = None
+    discount_dep: Optional[float] = None
+    cat_spend_dist: Optional[Dict[str, float]] = None
 
 class EngagementFeatures(BaseModel):
     user_id: str
-    push_notification_open_rate: Optional[float] = None
-    email_click_rate: Optional[float] = None
-    in_app_offer_click_rate: Optional[float] = None
-    response_time_to_promotions: Optional[float] = None
-    recent_retention_offer_response: Optional[str] = None
+    push_open_rate: Optional[float] = None
+    email_ctr: Optional[float] = None
+    inapp_ctr: Optional[float] = None
+    promo_resp_time: Optional[float] = None
+    retention_resp: Optional[str] = None
 
 class SupportFeatures(BaseModel):
     user_id: str
-    support_tickets_last_90days: Optional[int] = None
-    avg_ticket_resolution_time: Optional[float] = None
-    csat_score_last_interaction: Optional[float] = None
-    refund_requests: Optional[int] = None
+    tickets_90d: Optional[int] = None
+    avg_ticket_res: Optional[float] = None
+    csat_score: Optional[float] = None
+    refund_req: Optional[int] = None
 
 class RealTimeSessionFeatures(BaseModel):
     user_id: str
-    current_session_clicks: Optional[int] = None
-    time_spent_on_checkout_page: Optional[float] = None
-    added_to_cart_but_not_bought_flag: Optional[bool] = None
-    session_bounce_flag: Optional[bool] = None
+    curr_sess_clk: Optional[int] = None
+    checkout_time: Optional[float] = None
+    cart_no_buy: Optional[bool] = None
+    bounce_flag: Optional[bool] = None
 
 class ChurnPredictionResponse(BaseModel):
     user_id: str
@@ -351,4 +351,21 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import sys
+    
+    # Default values
+    host = "0.0.0.0"
+    port = 8000
+    
+    # Parse command line arguments
+    if "--host" in sys.argv:
+        host_index = sys.argv.index("--host") + 1
+        if host_index < len(sys.argv):
+            host = sys.argv[host_index]
+    
+    if "--port" in sys.argv:
+        port_index = sys.argv.index("--port") + 1
+        if port_index < len(sys.argv):
+            port = int(sys.argv[port_index])
+    
+    uvicorn.run(app, host=host, port=port)
