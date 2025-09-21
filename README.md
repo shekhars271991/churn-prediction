@@ -34,17 +34,14 @@ curl -X POST "http://localhost:8000/predict/test_001"
 ### API Service (Port 8000)
 - `POST /ingest/{feature_type}` - Ingest features (profile, behavior, transactional, engagement, support, realtime)
 - `POST /predict/{user_id}` - Get churn prediction + auto-trigger nudges
-- `GET /health` - Health check
-
-### Nudge Service (Port 8002)  
-- `POST /trigger` - Trigger nudges based on churn score
-- `GET /rules` - View nudge rules
+- `GET /nudge/rules` - View all nudge rules
+- `GET /nudge/rules/{rule_id}` - Get specific nudge rule
+- `GET /nudge/test/{user_id}` - Test nudge rule matching
 - `GET /health` - Health check
 
 ## 🏗️ Architecture
 
-- **API Service**: Feature ingestion + churn prediction (integrated model)
-- **Nudge Service**: Rule-based nudge triggering  
+- **API Service**: Feature ingestion + churn prediction + nudge triggering (integrated model & nudge engine)
 - **Training Service**: Synthetic data generation + model training
 - **Aerospike**: Real-time feature store
 
@@ -65,6 +62,27 @@ curl -X POST "http://localhost:8000/predict/test_001"
   "risk_segment": "high", 
   "churn_reasons": ["INACTIVITY", "CART_ABANDONMENT"],
   "confidence_score": 0.89,
-  "nudges_triggered": [...]
+  "nudges_triggered": [{"type": "Push Notification", "channel": "push"}],
+  "nudge_rule_matched": "rule_2"
 }
 ```
+
+## 🔧 Development
+
+### Debug Mode
+```bash
+# Use VS Code debugger with .vscode/launch.json
+# API Service: localhost:8100 (includes integrated nudge engine)
+```
+
+### Directory Structure
+```
+├── api-service/         # Main API + integrated model + nudge engine
+├── training-service/    # Model training + data generation  
+├── models/             # Trained model artifacts
+└── docker-compose.yml  # Service orchestration
+```
+
+## 📈 Production Notes
+
+This is a POC. For production: add authentication, monitoring, model versioning, and real nudge delivery systems.

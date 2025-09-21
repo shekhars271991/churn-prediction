@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 import aerospike
@@ -9,6 +9,7 @@ from datetime import datetime
 import logging
 from contextlib import asynccontextmanager
 from model_predictor import churn_predictor, get_model_health
+from nudge_engine import nudge_engine, get_nudge_health, NudgeResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +30,7 @@ app = FastAPI(title="Churn Prediction API", version="1.0.0", lifespan=lifespan)
 AEROSPIKE_HOST = os.getenv("AEROSPIKE_HOST", "aerospike")
 AEROSPIKE_PORT = int(os.getenv("AEROSPIKE_PORT", "3000"))
 MODEL_SERVICE_URL = os.getenv("MODEL_SERVICE_URL", "http://localhost:8001")
-NUDGE_SERVICE_URL = os.getenv("NUDGE_SERVICE_URL", "http://localhost:8002")
+# NUDGE_SERVICE_URL = os.getenv("NUDGE_SERVICE_URL", "http://localhost:8002")  # No longer needed - integrated
 
 # Aerospike client (will be initialized on startup)
 client = None
@@ -118,6 +119,8 @@ class ChurnPredictionResponse(BaseModel):
     features_retrieved: Dict[str, Any]
     feature_freshness: str
     prediction_timestamp: str
+    nudges_triggered: Optional[List[Dict[str, Any]]] = None
+    nudge_rule_matched: Optional[str] = None
 
 class MonitoringMetrics(BaseModel):
     model_config = {"protected_namespaces": ()}
@@ -257,6 +260,19 @@ async def predict_churn(user_id: str) -> ChurnPredictionResponse:
         # Call local model for prediction
         prediction_data = churn_predictor.predict_churn(features)
         
+        # Trigger nudges using integrated nudge engine
+        nudge_response = None
+        if prediction_data["risk_segment"] in ["high", "critical"]:
+            try:
+                nudge_response = nudge_engine.trigger_nudges(
+                    user_id=user_id,
+                    churn_probability=prediction_data["churn_probability"],
+                    risk_segment=prediction_data["risk_segment"],
+                    churn_reasons=prediction_data["churn_reasons"]
+                )
+            except Exception as e:
+                logger.error(f"Failed to trigger nudge for user {user_id}: {str(e)}")
+        
         # Prepare response
         response = ChurnPredictionResponse(
             user_id=user_id,
@@ -266,24 +282,10 @@ async def predict_churn(user_id: str) -> ChurnPredictionResponse:
             confidence_score=prediction_data["confidence_score"],
             features_retrieved=features,
             feature_freshness=feature_freshness,
-            prediction_timestamp=datetime.utcnow().isoformat()
+            prediction_timestamp=datetime.utcnow().isoformat(),
+            nudges_triggered=[nudge.dict() for nudge in nudge_response.nudges_triggered] if nudge_response else None,
+            nudge_rule_matched=nudge_response.rule_matched if nudge_response else None
         )
-        
-        # Trigger nudge if high or critical risk
-        if prediction_data["risk_segment"] in ["high", "critical"]:
-            try:
-                async with httpx.AsyncClient() as client_http:
-                    await client_http.post(
-                        f"{NUDGE_SERVICE_URL}/trigger",
-                        json={
-                            "user_id": user_id,
-                            "churn_probability": prediction_data["churn_probability"],
-                            "risk_segment": prediction_data["risk_segment"],
-                            "churn_reasons": prediction_data["churn_reasons"]
-                        }
-                    )
-            except Exception as e:
-                logger.error(f"Failed to trigger nudge for user {user_id}: {str(e)}")
         
         return response
         
@@ -339,10 +341,14 @@ async def health_check():
         # Get model health
         model_health = get_model_health()
         
+        # Get nudge engine health
+        nudge_health = get_nudge_health()
+        
         return {
             "status": "healthy" if aerospike_status == "connected" and model_health["model_loaded"] else "degraded",
             "aerospike": aerospike_status,
             "model": model_health,
+            "nudge_engine": nudge_health,
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
@@ -350,6 +356,29 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e)
         }
+
+# Nudge Engine Endpoints
+@app.get("/nudge/rules")
+async def get_nudge_rules():
+    """Get all nudge rules"""
+    return nudge_engine.get_rules()
+
+@app.get("/nudge/rules/{rule_id}")
+async def get_nudge_rule(rule_id: str):
+    """Get specific nudge rule by ID"""
+    rule = nudge_engine.get_rule(rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found")
+    return rule
+
+@app.get("/nudge/test/{user_id}")
+async def test_nudge_rules(
+    user_id: str, 
+    churn_probability: float = Query(..., description="Churn probability (0.0-1.0)"),
+    churn_reasons: List[str] = Query(..., description="List of churn reasons")
+):
+    """Test which rule would match for given parameters"""
+    return nudge_engine.test_rules(user_id, churn_probability, churn_reasons)
 
 if __name__ == "__main__":
     import uvicorn

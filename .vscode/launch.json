@@ -10,22 +10,9 @@
             "cwd": "${workspaceFolder}/api-service",
             "env": {
                 "AEROSPIKE_HOST": "localhost",
-                "AEROSPIKE_PORT": "3000",
-                "NUDGE_SERVICE_URL": "http://localhost:8102"
+                "AEROSPIKE_PORT": "3000"
             },
             "args": ["--host", "0.0.0.0", "--port", "8100"],
-            "justMyCode": true,
-            "stopOnEntry": false
-        },
-        {
-            "name": "Debug Nudge Service",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/nudge-service/main.py",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/nudge-service",
-            "env": {},
-            "args": ["--host", "0.0.0.0", "--port", "8102"],
             "justMyCode": true,
             "stopOnEntry": false
         },
@@ -53,8 +40,7 @@
             "cwd": "${workspaceFolder}/api-service",
             "env": {
                 "AEROSPIKE_HOST": "localhost",
-                "AEROSPIKE_PORT": "3000",
-                "NUDGE_SERVICE_URL": "http://localhost:8002"
+                "AEROSPIKE_PORT": "3000"
             },
             "args": ["--host", "0.0.0.0", "--port", "8000"],
             "justMyCode": true,

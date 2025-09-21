@@ -43,22 +43,10 @@ services:
     environment:
       - AEROSPIKE_HOST=aerospike
       - AEROSPIKE_PORT=3000
-      - NUDGE_SERVICE_URL=http://nudge-service:8002
     networks:
       - featurestore_network
     depends_on:
       - aerospike
-      - nudge-service
-    restart: unless-stopped
-
-
-  nudge-service:
-    build: ./nudge-service
-    container_name: churn_nudge_service
-    ports:
-      - "8002:8002"
-    networks:
-      - featurestore_network
     restart: unless-stopped
 
   training-service:

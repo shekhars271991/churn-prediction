@@ -1,14 +1,10 @@
-from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import logging
 from datetime import datetime
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-app = FastAPI(title="Nudge Service", version="1.0.0")
 
 # Pydantic models
 class NudgeRequest(BaseModel):
@@ -118,143 +114,116 @@ NUDGE_RULES = [
     }
 ]
 
-def find_matching_rule(churn_probability: float, churn_reasons: List[str]) -> Dict[str, Any]:
-    """Find the first matching nudge rule based on churn score and reasons"""
+class NudgeEngine:
+    """Nudge engine for triggering retention nudges based on churn predictions"""
     
-    # Sort rules by priority (rule_10 has highest priority)
-    sorted_rules = sorted(NUDGE_RULES, key=lambda x: int(x["rule_id"].split("_")[1]), reverse=True)
+    def __init__(self):
+        self.rules = NUDGE_RULES
+        logger.info(f"Nudge engine initialized with {len(self.rules)} rules")
     
-    for rule in sorted_rules:
-        # Check if churn probability is in range
-        score_min, score_max = rule["churn_score_range"]
-        if not (score_min <= churn_probability <= score_max):
-            continue
+    def find_matching_rule(self, churn_probability: float, churn_reasons: List[str]) -> Dict[str, Any]:
+        """Find the first matching nudge rule based on churn score and reasons"""
         
-        # Check if any churn reason matches
-        rule_reasons = rule["churn_reasons"]
-        if any(reason in rule_reasons for reason in churn_reasons):
-            return rule
-    
-    return None
-
-def execute_nudges(user_id: str, nudges: List[Dict[str, Any]]) -> List[NudgeAction]:
-    """Execute nudges (for POC, just log them)"""
-    executed_nudges = []
-    
-    for nudge in nudges:
-        # In production, this would actually send emails, push notifications, etc.
-        # For POC, we just log the action
-        logger.info(f"NUDGE EXECUTED - User: {user_id}, Type: {nudge['type']}, "
-                   f"Channel: {nudge['channel']}, Template: {nudge['content_template']}")
+        # Sort rules by priority (rule_10 has highest priority)
+        sorted_rules = sorted(self.rules, key=lambda x: int(x["rule_id"].split("_")[1]), reverse=True)
         
-        executed_nudges.append(NudgeAction(
-            type=nudge["type"],
-            content_template=nudge["content_template"],
-            channel=nudge["channel"],
-            priority=nudge["priority"]
-        ))
+        for rule in sorted_rules:
+            # Check if churn probability is in range
+            score_min, score_max = rule["churn_score_range"]
+            if not (score_min <= churn_probability <= score_max):
+                continue
+            
+            # Check if any churn reason matches
+            rule_reasons = rule["churn_reasons"]
+            if any(reason in rule_reasons for reason in churn_reasons):
+                return rule
+        
+        return None
     
-    return executed_nudges
-
-@app.get("/")
-async def root():
-    return {"message": "Nudge Service", "version": "1.0.0"}
-
-@app.post("/trigger")
-async def trigger_nudge(request: NudgeRequest) -> NudgeResponse:
-    """Trigger nudges based on churn score and reasons"""
-    try:
-        logger.info(f"Processing nudge request for user {request.user_id} "
-                   f"(score: {request.churn_probability}, segment: {request.risk_segment})")
+    def execute_nudges(self, user_id: str, nudges: List[Dict[str, Any]]) -> List[NudgeAction]:
+        """Execute nudges (for POC, just log them)"""
+        executed_nudges = []
+        
+        for nudge in nudges:
+            # In production, this would actually send emails, push notifications, etc.
+            # For POC, we just log the action
+            logger.info(f"NUDGE EXECUTED - User: {user_id}, Type: {nudge['type']}, "
+                       f"Channel: {nudge['channel']}, Template: {nudge['content_template']}")
+            
+            executed_nudges.append(NudgeAction(
+                type=nudge["type"],
+                content_template=nudge["content_template"],
+                channel=nudge["channel"],
+                priority=nudge["priority"]
+            ))
+        
+        return executed_nudges
+    
+    def trigger_nudges(self, user_id: str, churn_probability: float, risk_segment: str, churn_reasons: List[str]) -> NudgeResponse:
+        """Trigger nudges based on churn score and reasons"""
+        logger.info(f"Processing nudge request for user {user_id} "
+                   f"(score: {churn_probability}, segment: {risk_segment})")
         
         # Find matching rule
-        matching_rule = find_matching_rule(request.churn_probability, request.churn_reasons)
+        matching_rule = self.find_matching_rule(churn_probability, churn_reasons)
         
         if not matching_rule:
-            logger.info(f"No matching nudge rule found for user {request.user_id}")
+            logger.info(f"No matching nudge rule found for user {user_id}")
             return NudgeResponse(
-                user_id=request.user_id,
+                user_id=user_id,
                 nudges_triggered=[],
                 rule_matched="none",
                 timestamp=datetime.utcnow().isoformat()
             )
         
         # Execute nudges
-        executed_nudges = execute_nudges(request.user_id, matching_rule["nudges"])
+        executed_nudges = self.execute_nudges(user_id, matching_rule["nudges"])
         
-        logger.info(f"Triggered {len(executed_nudges)} nudges for user {request.user_id} "
+        logger.info(f"Triggered {len(executed_nudges)} nudges for user {user_id} "
                    f"using {matching_rule['rule_id']}")
         
         return NudgeResponse(
-            user_id=request.user_id,
+            user_id=user_id,
             nudges_triggered=executed_nudges,
             rule_matched=matching_rule["rule_id"],
             timestamp=datetime.utcnow().isoformat()
         )
+    
+    def get_rules(self) -> Dict[str, Any]:
+        """Get all nudge rules"""
+        return {"rules": self.rules, "total_rules": len(self.rules)}
+    
+    def get_rule(self, rule_id: str) -> Dict[str, Any]:
+        """Get specific nudge rule by ID"""
+        for rule in self.rules:
+            if rule["rule_id"] == rule_id:
+                return rule
+        return None
+    
+    def test_rules(self, user_id: str, churn_probability: float, churn_reasons: List[str]) -> Dict[str, Any]:
+        """Test which rule would match for given parameters"""
+        matching_rule = self.find_matching_rule(churn_probability, churn_reasons)
         
-    except Exception as e:
-        logger.error(f"Error triggering nudges for user {request.user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Nudge trigger failed: {str(e)}")
-
-@app.get("/rules")
-async def get_nudge_rules():
-    """Get all nudge rules"""
-    return {"rules": NUDGE_RULES, "total_rules": len(NUDGE_RULES)}
-
-@app.get("/rules/{rule_id}")
-async def get_nudge_rule(rule_id: str):
-    """Get specific nudge rule by ID"""
-    for rule in NUDGE_RULES:
-        if rule["rule_id"] == rule_id:
-            return rule
-    
-    raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found")
-
-@app.post("/test/{user_id}")
-async def test_nudge_rules(user_id: str, churn_probability: float, churn_reasons: List[str]):
-    """Test which rule would match for given parameters"""
-    matching_rule = find_matching_rule(churn_probability, churn_reasons)
-    
-    if not matching_rule:
+        if not matching_rule:
+            return {
+                "user_id": user_id,
+                "matching_rule": None,
+                "message": "No rule matches the given parameters"
+            }
+        
         return {
             "user_id": user_id,
-            "matching_rule": None,
-            "message": "No rule matches the given parameters"
+            "matching_rule": matching_rule["rule_id"],
+            "rule_details": matching_rule,
+            "would_trigger": len(matching_rule["nudges"])
         }
-    
-    return {
-        "user_id": user_id,
-        "matching_rule": matching_rule["rule_id"],
-        "rule_details": matching_rule,
-        "would_trigger": len(matching_rule["nudges"])
-    }
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+# Global nudge engine instance
+nudge_engine = NudgeEngine()
+
+def get_nudge_health() -> Dict[str, Any]:
+    """Get nudge engine health status"""
     return {
-        "status": "healthy",
-        "rules_loaded": len(NUDGE_RULES),
+        "rules_loaded": len(nudge_engine.rules),
         "timestamp": datetime.utcnow().isoformat()
     }
-
-if __name__ == "__main__":
-    import uvicorn
-    import sys
-    
-    # Default values
-    host = "0.0.0.0"
-    port = 8002
-    
-    # Parse command line arguments
-    if "--host" in sys.argv:
-        host_index = sys.argv.index("--host") + 1
-        if host_index < len(sys.argv):
-            host = sys.argv[host_index]
-    
-    if "--port" in sys.argv:
-        port_index = sys.argv.index("--port") + 1
-        if port_index < len(sys.argv):
-            port = int(sys.argv[port_index])
-    
-    uvicorn.run(app, host=host, port=port)
